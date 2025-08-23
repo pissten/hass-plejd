@@ -23,8 +23,8 @@ async def async_setup_entry(
     entities: list[PlejdThermostatEntity] = []
 
     for dev in site.devices:
-        # Bruk outputType=CLIMATE fra pyplejd for å finne termostater
-        if getattr(dev, "outputType", None) == dt.PlejdDeviceType.CLIMATE:
+        if getattr(dev, "outputType", None) == dt.PlejdDeviceType.CLIMATE \
+        or dev.__class__.__name__ == "PlejdThermostat":
             entities.append(PlejdThermostatEntity(dev))
 
     if entities:
