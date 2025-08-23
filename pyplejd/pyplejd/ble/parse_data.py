@@ -32,6 +32,20 @@ def parse_data(data: bytearray):
     data_hex = "".join(f"{b:02x}" for b in data_bytes)
 
     match data_bytes:
+                # --- TRM-01 specific frames ----------------------------------------
+        case [addr, 0x01, 0x10, 0x04, 0x5C, lo, hi]:
+            # Setpoint in little-endian, scaled ×10
+            sp = (hi << 8) | lo
+            rec_log(f"TRM01 SETPOINT = {sp} ({sp/10:.1f}°C)", addr)
+            rec_log(f"    {data_hex}", addr)
+
+        case [addr, 0x01, 0x10, 0x00, dim1, dim2, 0x80]:
+            rec_log("TRM01 HEATING=ON (extra=0x80)", addr)
+            rec_log(f"    {data_hex}", addr)
+
+        case [addr, 0x01, 0x10, 0x00, dim1, dim2, 0x00]:
+            rec_log("TRM01 HEATING=OFF (extra=0x00)", addr)
+            rec_log(f"    {data_hex}", addr)
                 # --- TRM-01 discovery/probe ------------------------------------------------
         case [addr, 0x01, 0x00, 0x04, b1, b2, *extra]:
             # Dette matcher rammer som: 13 01 00 04 5c a0 00   (130100045ca000)
