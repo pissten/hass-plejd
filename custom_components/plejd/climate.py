@@ -23,10 +23,8 @@ async def async_setup_entry(
     entities: list[PlejdThermostatEntity] = []
 
     for dev in site.devices:
-        # TODO: Bekreft hvordan TRM-01 identifiseres fra pyplejd
-        if getattr(dev, "product", None) == "TRM-01" or getattr(
-            dev, "device_class", None
-        ) == "thermostat":
+        # Bruk outputType=CLIMATE fra pyplejd for å finne termostater
+        if getattr(dev, "outputType", None) == dt.PlejdDeviceType.CLIMATE:
             entities.append(PlejdThermostatEntity(dev))
 
     if entities:
@@ -49,29 +47,23 @@ class PlejdThermostatEntity(PlejdDeviceBaseEntity, ClimateEntity):
     # --- State properties ---
     @property
     def hvac_mode(self) -> HVACMode:
-        # TODO: Bytt til device.heating (bool) når pyplejd støtter det
-        return HVACMode.HEAT if getattr(self.device, "heating", False) else HVACMode.OFF
+        # Bruker felt fra parse_data → PlejdThermostat.parse_state
+        return HVACMode(self.device._state.get("hvac_mode", "off"))
+
+    @property
+    def hvac_action(self) -> str:
+        return self.device._state.get("hvac_action", "idle")
 
     @property
     def current_temperature(self) -> float | None:
-        # TODO: Bytt til device.current_temperature
-        return getattr(self.device, "current_temperature", None)
+        return self.device._state.get("current_temperature")
 
     @property
     def target_temperature(self) -> float | None:
-        # TODO: Bytt til device.target_temperature
-        return getattr(self.device, "target_temperature", None)
+        return self.device._state.get("target_temperature")
 
     # --- Commands ---
-    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
-        # TODO: Koble til pyplejd: device.set_mode(True/False)
-        if hvac_mode == HVACMode.HEAT:
-            await self.device.set_mode(True)
-        else:
-            await self.device.set_mode(False)
-
     async def async_set_temperature(self, **kwargs) -> None:
         if (t := kwargs.get(ATTR_TEMPERATURE)) is None:
             return
-        # TODO: Koble til pyplejd: device.set_target_temperature(temp)
-        await self.device.set_target_temperature(float(t))
+        await self.device.set_temperature(float(t))
