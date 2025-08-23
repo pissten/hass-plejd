@@ -26,6 +26,7 @@ class PlejdDeviceType(StrEnum):
     COVER = "COVERABLE"
     SCENE = "SCENE"
     UNKNOWN = "UNKNOWN"
+    CLIMATE = "CLIMATE"
 
 
 class PlejdDevice:

@@ -32,21 +32,43 @@ def parse_data(data: bytearray):
     data_hex = "".join(f"{b:02x}" for b in data_bytes)
 
     match data_bytes:
-                # --- TRM-01 specific frames ----------------------------------------
+
+        # --- TRM-01 specific frames ----------------------------------------
         case [addr, 0x01, 0x10, 0x04, 0x5C, lo, hi]:
             # Setpoint in little-endian, scaled ×10
             sp = (hi << 8) | lo
             rec_log(f"TRM01 SETPOINT = {sp} ({sp/10:.1f}°C)", addr)
             rec_log(f"    {data_hex}", addr)
+            return {
+                "address": addr,
+                "target_temperature": sp / 10.0,
+            }
 
         case [addr, 0x01, 0x10, 0x00, dim1, dim2, 0x80]:
-            rec_log("TRM01 HEATING=ON (extra=0x80)", addr)
+            # Heating ON
+            temp_c = dim2 - 74
+            rec_log(f"TRM01 HEATING=ON temp={temp_c}°C", addr)
             rec_log(f"    {data_hex}", addr)
+            return {
+                "address": addr,
+                "current_temperature": temp_c,
+                "hvac_action": "heating",
+                "hvac_mode": "heat",
+            }
 
         case [addr, 0x01, 0x10, 0x00, dim1, dim2, 0x00]:
-            rec_log("TRM01 HEATING=OFF (extra=0x00)", addr)
+            # Heating OFF
+            temp_c = dim2 - 74
+            rec_log(f"TRM01 HEATING=OFF temp={temp_c}°C", addr)
             rec_log(f"    {data_hex}", addr)
-                # --- TRM-01 discovery/probe ------------------------------------------------
+            return {
+                "address": addr,
+                "current_temperature": temp_c,
+                "hvac_action": "idle",
+                "hvac_mode": "heat",
+            }
+        # --- TRM-01 discovery/probe ------------------------------------------------
+
         case [addr, 0x01, 0x00, 0x04, b1, b2, *extra]:
             # Dette matcher rammer som: 13 01 00 04 5c a0 00   (130100045ca000)
             # Vi antar dette er en "verdi"-rapport (to bytes), muligens current/target temp.

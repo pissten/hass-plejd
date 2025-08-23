@@ -110,3 +110,24 @@ def request_button(mesh: PlejdMesh):
     payload = f"00 0110 0015"
     send_log(f"IDENTIFY BUTTON REQUEST {hex_payload(payload)}")
     return encode(mesh, [payload])
+
+
+def set_temperature(mesh: PlejdMesh, address: int, temp_c: float):
+    """
+    Send nytt settpunkt til TRM-01.
+    temp_c gis i °C (float), payload kodes i tidels grader (LE).
+    """
+    val = int(round(temp_c * 10))
+    if val < 0:
+        val = 0
+    if val > 400:
+        val = 400  # 40.0°C maks
+
+    lo = val & 0xFF
+    hi = (val >> 8) & 0xFF
+
+    # Payloadformat: AA 0110 045c LO HI
+    payload = f"{address:02x} 0110 045c {lo:02x}{hi:02x}"
+    send_log(f"SET TEMP {temp_c:.1f}°C -> {hex_payload(payload)}", address)
+
+    return encode(mesh, [payload])

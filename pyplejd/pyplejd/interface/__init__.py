@@ -20,6 +20,11 @@ def outputDeviceClass(device: PlejdEntityData) -> Type[dt.PlejdDevice]:
         return dt.PlejdRelay
     if tpe == "COVERABLE":
         return dt.PlejdCover
+    
+    # --- TRM-01 Thermostat detection ---
+    hw = (device["plejdDevice"].firmware.notes or "").upper()
+    if "TRM" in hw:
+        return dt.PlejdThermostat
 
     traits = dt.PlejdTraits(device["device"].traits)
     if dt.PlejdTraits.COVER in traits:
