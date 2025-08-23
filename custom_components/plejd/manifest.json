@@ -16,5 +16,5 @@
   "issue_tracker": "https://github.com/thomasloven/hass_plejd/issues",
   "loggers": ["pyplejd"],
   "requirements": ["pyplejd @ git+https://github.com/pissten/hass-plejd@feature/trm01-support#subdirectory=pyplejd"],
-  "version": "0.15.4"
+  "version": "0.15.5-trm01"
 }
