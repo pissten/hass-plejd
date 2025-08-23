@@ -14,6 +14,20 @@ from homeassistant.helpers.device_registry import DeviceEntry
 from .const import DOMAIN, CONF_SITE_ID
 from .plejd_site import PlejdSite, ConnectionError, AuthenticationError
 
+import logging
+_LOGGER = logging.getLogger(__name__)
+
+# Debug: se hvilken pyplejd som lastes (sti + versjon)
+try:
+    import pyplejd  # type: ignore[import-not-found]
+    _LOGGER.warning(
+        "pyplejd loaded from: %s (version=%s)",
+        getattr(pyplejd, "__file__", "<unknown>"),
+        getattr(pyplejd, "__version__", "<unknown>"),
+    )
+except Exception as e:
+    _LOGGER.error("Failed to import pyplejd for debug: %s", e)
+
 PLATFORMS = [
     Platform.LIGHT,
     Platform.SWITCH,
