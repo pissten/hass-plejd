@@ -13,7 +13,8 @@ from homeassistant.helpers.storage import Store
 
 from home_assistant_bluetooth import BluetoothServiceInfoBleak
 
-from pyplejd import (
+# ⬇️ VENDOR: bruk den lokale pyplejd-pakken inne i integrasjonen
+from .pyplejd import (
     PlejdManager,
     ConnectionError,
     AuthenticationError,
