@@ -5,28 +5,16 @@ from typing import TypedDict
 
 from bleak_retry_connector import close_stale_connections
 
+# ⬇️ VENDOR: pek inn i integrasjonens lokale pyplejd
 from .ble import PlejdMesh, PLEJD_SERVICE
 from .cloud import PlejdCloudSite
-
-# ⬇️ VENDOR: pek inn i integrasjonens lokale pyplejd
-from .pyplejd.ble import PlejdMesh, PLEJD_SERVICE
-from .pyplejd.cloud import PlejdCloudSite
-from .pyplejd.errors import AuthenticationError, ConnectionError
-from .pyplejd.interface import (
+from .errors import AuthenticationError, ConnectionError
+from .interface import (
     outputDeviceClass,
     inputDeviceClass,
     sceneDeviceClass,
     DeviceTypes,
 )
-
-#from .errors import AuthenticationError, ConnectionError
-#from .interface import (
-#    outputDeviceClass,
-#    inputDeviceClass,
-#    sceneDeviceClass,
-#    DeviceTypes,
-#)
-
 
 __all__ = [
     "PlejdManager",

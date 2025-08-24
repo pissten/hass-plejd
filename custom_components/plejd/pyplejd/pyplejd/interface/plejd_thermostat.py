@@ -1,5 +1,5 @@
 from .plejd_device import PlejdOutput, PlejdDeviceType
-from .payload_encode import set_temperature as encode_set_temp
+from ..ble.payload_encode import set_temperature as encode_set_temp
 
 class PlejdThermostat(PlejdOutput):
     def __init__(self, *args, **kwargs):

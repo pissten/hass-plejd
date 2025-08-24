@@ -14,7 +14,7 @@ from .plejd_light import PlejdLight
 from .plejd_motion_sensor import PlejdMotionSensor
 from .plejd_relay import PlejdRelay
 from .plejd_scene import PlejdScene
-from ..pyplejd.plejd_thermostat import PlejdThermostat
+from .plejd_thermostat import PlejdThermostat
 
 __all__ = [
     "PlejdDeviceType",
