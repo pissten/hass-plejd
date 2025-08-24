@@ -13,13 +13,35 @@ from homeassistant.helpers.storage import Store
 
 from home_assistant_bluetooth import BluetoothServiceInfoBleak
 
-from pyplejd import (
-    PlejdManager,
-    ConnectionError,
-    AuthenticationError,
-    PLEJD_SERVICE,
-    DeviceTypes as dt,
-)
+#from pyplejd import (
+#    PlejdManager,
+#    ConnectionError,
+#    AuthenticationError,
+#    PLEJD_SERVICE,
+#    DeviceTypes as dt,
+#)
+
+# --- BEGIN: force local pyplejd (repo sibling) when present ---
+import os, sys
+_here = os.path.dirname(__file__)
+_repo_root = os.path.abspath(os.path.join(_here, "..", ".."))          # hass-plejd/
+_local_pkg_dir = os.path.join(_repo_root, "pyplejd")                    # hass-plejd/pyplejd
+
+if os.path.isdir(_local_pkg_dir) and _repo_root not in sys.path:
+    sys.path.insert(0, _repo_root)
+    _LOGGER.warning("plejd_site: USING LOCAL pyplejd at %s", _local_pkg_dir)
+else:
+    _LOGGER.warning("plejd_site: local pyplejd NOT found at %s (falling back to PyPI)", _local_pkg_dir)
+
+import pyplejd  # type: ignore
+_LOGGER.warning("plejd_site: pyplejd resolved to %s", getattr(pyplejd, "__file__", "<unknown>"))
+
+from pyplejd.manager import PlejdManager
+from pyplejd.errors import AuthenticationError, ConnectionError
+from pyplejd.ble import PLEJD_SERVICE
+# Viktig: bruk modul, ikke 'DeviceTypes' symbol – funker i både lokal og PyPI
+from pyplejd.interface import device_type as dt
+# --- END: force local pyplejd ---
 
 from .const import DOMAIN
 from .plejd_entity import register_unknown_device
