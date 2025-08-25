@@ -17,7 +17,10 @@ def _fmt_two(v: int) -> str:
 def _probe_pair(addr: int, tag: str, a: int, b: int, data_hex: str) -> None:
     be = _u16_be(a, b)
     le = _u16_le(a, b)
-    rec_log(f"{tag} pair a={a:#04x} b={b:#04x}  BE={_fmt_two(be)}  LE={_fmt_two(le)}", addr)
+    rec_log(
+        f"{tag} pair a={a:#04x} b={b:#04x}  BE={_fmt_two(be)}  LE={_fmt_two(le)}",
+        addr,
+    )
     rec_log(f"    {data_hex}", addr)
 
 def _scan_trm_candidates(addr: int, data_bytes: list[int], data_hex: str) -> None:
@@ -25,9 +28,9 @@ def _scan_trm_candidates(addr: int, data_bytes: list[int], data_hex: str) -> Non
         return
     payload = data_bytes[1:]
     rec_log(f"TRM_SCAN len={len(payload)} bytes={payload}", addr)
-    for i in range(max(0, len(payload)-1)):
+    for i in range(len(payload) - 1):
         a = payload[i]
-        b = payload[i+1]
+        b = payload[i + 1]
         _probe_pair(addr, f"TRM_SCAN[{i}:{i+2}]", a, b, data_hex)
 
 def parse_data(data: bytearray):
@@ -50,45 +53,9 @@ def parse_data(data: bytearray):
                 "target_temperature": sp / 10.0,
             }
 
-        # TRM1B-statusramme (romtemp + heating flag)
-        # Observasjoner fra logg:
-        # 13010300 1b 7e 5c ac 68 01 00
-        # Etter 0x1B følger: [?, temp_hi, temp_lo, ?, heat_flag, ?]
-        # - Temperatur: BE(temp_hi, temp_lo) / 1000  (0x5c ac -> 23724 -> 23.724°C)
-        # - heat_flag: 1 = heating, 0 = idle
-        case [addr, 0x01, 0x03, 0x00, 0x1B, a, t_hi, t_lo, b, heat_flag, tail]:
-            temp_milli = (t_hi << 8) | t_lo
-            temp_c = temp_milli / 1000.0
-            heating = bool(heat_flag)
-            rec_log(f"TRM1B status temp={temp_c:.3f}°C heating={heating} raw=[{a:#04x},{t_hi:#04x},{t_lo:#04x},{b:#04x},{heat_flag:#04x},{tail:#04x}]", addr)
-            rec_log(f"    {data_hex}", addr)
-            if TRM_PROBE:
-                _scan_trm_candidates(addr, data_bytes, data_hex)
-            return {
-                "address": addr,
-                "current_temperature": temp_c,
-                "hvac_action": "heating" if heating else "idle",
-                "power": True,  # enheten er "på", selv om den kan være idle
-                "hvac_mode": "heat",
-            }
-
-        # Noen gateways sender en broadcast-variant via addr=0 med samme nyttelast
-        #   00 01 10 00 1b 79 5c ac 68 00
-        case [0x00, 0x01, 0x10, 0x00, 0x1B, a, t_hi, t_lo, b, heat_flag]:
-            temp_milli = (t_hi << 8) | t_lo
-            temp_c = temp_milli / 1000.0
-            heating = bool(heat_flag)
-            rec_log(f"TRM1B(broadcast) temp={temp_c:.3f}°C heating={heating} raw=[{a:#04x},{t_hi:#04x},{t_lo:#04x},{b:#04x},{heat_flag:#04x}]", "TRM")
-            rec_log(f"    {data_hex}", "TRM")
-            if TRm_PROBE := TRM_PROBE:
-                _scan_trm_candidates(0, data_bytes, data_hex)
-            return {
-                "address": 0,  # broadcast
-                "current_temperature": temp_c,
-                "hvac_action": "heating" if heating else "idle",
-            }
-        
-        # TRM1B statusramme (variant A): ... 01 03 00 1b a t_hi t_lo b heat tail
+        # TRM1B-statusramme (romtemp + heating flag), observert:
+        # 13 01 03 00 1b 7e 5c ac 68 01 00
+        # Etter 0x1B følger: [?, t_hi, t_lo, ?, heat_flag, (ev. tail)]
         case [addr, 0x01, 0x03, 0x00, 0x1B, a, t_hi, t_lo, b, heat_flag, tail]:
             temp_milli = (t_hi << 8) | t_lo
             temp_c = temp_milli / 1000.0
@@ -105,11 +72,11 @@ def parse_data(data: bytearray):
                 "address": addr,
                 "current_temperature": temp_c,
                 "hvac_action": "heating" if heating else "idle",
-                "power": True,
+                "power": True,              # enheten er aktiv (kan være idle)
                 "hvac_mode": "heat",
             }
 
-        # TRM1B statusramme (variant B – uten trailing byte)
+        # Variant uten trailing byte
         case [addr, 0x01, 0x03, 0x00, 0x1B, a, t_hi, t_lo, b, heat_flag]:
             temp_milli = (t_hi << 8) | t_lo
             temp_c = temp_milli / 1000.0
@@ -130,8 +97,7 @@ def parse_data(data: bytearray):
                 "hvac_mode": "heat",
             }
 
-        # TRM1B statusramme (variant C – samme nyttelast men 01 10 00 1b …)
-        # NB: addr kan være 0 (broadcast) eller faktisk enhetsadresse.
+        # Broadcast/alternativ form: 00 01 10 00 1b ...
         case [addr, 0x01, 0x10, 0x00, 0x1B, a, t_hi, t_lo, b, heat_flag]:
             temp_milli = (t_hi << 8) | t_lo
             temp_c = temp_milli / 1000.0
@@ -145,17 +111,16 @@ def parse_data(data: bytearray):
             if TRM_PROBE:
                 _scan_trm_candidates(addr, data_bytes, data_hex)
             return {
-                "address": addr,
+                "address": addr,  # kan være 0 (broadcast)
                 "current_temperature": temp_c,
                 "hvac_action": "heating" if heating else "idle",
                 "power": True,
                 "hvac_mode": "heat",
             }
 
-
         # Legacy “heating on/off”-rammer – nyttige for action, men IKKE for temp
         case [addr, 0x01, 0x10, 0x00, dim1, dim2, 0x80]:
-            rec_log(f"TRM01 HEATING=ON (legacy)", addr)
+            rec_log("TRM01 HEATING=ON (legacy)", addr)
             rec_log(f"    {data_hex}", addr)
             if TRM_PROBE:
                 _probe_pair(addr, "TRM_DIM_LE", dim1, dim2, data_hex)
@@ -168,7 +133,7 @@ def parse_data(data: bytearray):
             }
 
         case [addr, 0x01, 0x10, 0x00, dim1, dim2, 0x00]:
-            rec_log(f"TRM01 HEATING=OFF (legacy)", addr)
+            rec_log("TRM01 HEATING=OFF (legacy)", addr)
             rec_log(f"    {data_hex}", addr)
             if TRM_PROBE:
                 _probe_pair(addr, "TRM_DIM_LE", dim1, dim2, data_hex)
@@ -214,8 +179,9 @@ def parse_data(data: bytearray):
              [addr, 0x01, 0x10, 0x00, 0x98, state, dim1, dim2, *extra]:
             extra_hex = "".join(f"{e:02x}" for e in extra)
             rec_log(f"DIM {state=} {dim1=} {dim2=} {extra=} {extra_hex}", addr)
-            # NB: Ikke sett current_temperature her! (det ga feil for TRM-01)
-            cover_position = int.from_bytes([dim1, dim2], byteorder="little", signed=False)
+            cover_position = int.from_bytes(
+                [dim1, dim2], byteorder="little", signed=False
+            )
             cover_angle = None
             if extra:
                 cover_angle = extra[0]
