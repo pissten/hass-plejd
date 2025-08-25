@@ -21,27 +21,58 @@ from home_assistant_bluetooth import BluetoothServiceInfoBleak
 #    DeviceTypes as dt,
 #)
 
-# --- BEGIN: force local pyplejd (repo sibling) when present ---
-import os, sys
-_here = os.path.dirname(__file__)
-_repo_root = os.path.abspath(os.path.join(_here, "..", ".."))          # hass-plejd/
-_local_pkg_dir = os.path.join(_repo_root, "pyplejd")                    # hass-plejd/pyplejd
+# --- BEGIN: bruk lokal pyplejd hvis den finnes (tåler både /config/pyplejd og /config/pyplejd/pyplejd) ---
+import os, sys, logging
+_LOGGER = logging.getLogger(__name__)
 
-if os.path.isdir(_local_pkg_dir) and _repo_root not in sys.path:
-    sys.path.insert(0, _repo_root)
-    _LOGGER.warning("plejd_site: USING LOCAL pyplejd at %s", _local_pkg_dir)
+_here = os.path.dirname(__file__)
+_config_dir = os.path.abspath(os.path.join(_here, "..", ".."))           # /config
+_repo_candidate = os.path.join(_config_dir, "pyplejd")                   # /config/pyplejd
+_pkg_marker = os.path.join("pyplejd", "__init__.py")                      # marker for pakka
+
+chosen_root = None
+# 1) /config/pyplejd (inneholder mappa 'pyplejd/__init__.py'?)
+if os.path.isfile(os.path.join(_repo_candidate, _pkg_marker)):
+    chosen_root = _repo_candidate
+# 2) fallback: /config (inneholder 'pyplejd/__init__.py' direkte?)
+elif os.path.isfile(os.path.join(_config_dir, _pkg_marker)):
+    chosen_root = _config_dir
+
+if chosen_root and chosen_root not in sys.path:
+    sys.path.insert(0, chosen_root)
+    _LOGGER.warning("plejd_site: USING LOCAL pyplejd at %s", os.path.join(chosen_root, "pyplejd"))
 else:
-    _LOGGER.warning("plejd_site: local pyplejd NOT found at %s (falling back to PyPI)", _local_pkg_dir)
+    _LOGGER.warning("plejd_site: local pyplejd NOT found at /config/pyplejd[/pyplejd] (falling back to PyPI)")
 
 import pyplejd  # type: ignore
-_LOGGER.warning("plejd_site: pyplejd resolved to %s", getattr(pyplejd, "__file__", "<unknown>"))
+_LOGGER.warning("plejd_site: pyplejd resolved to %r", getattr(pyplejd, "__file__", None))
 
-from pyplejd.manager import PlejdManager
-from pyplejd.errors import AuthenticationError, ConnectionError
-from pyplejd.ble import PLEJD_SERVICE
-# Viktig: bruk modul, ikke 'DeviceTypes' symbol – funker i både lokal og PyPI
-from pyplejd.interface import device_type as dt
-# --- END: force local pyplejd ---
+# Manager: prøv modul først, så rot-eksport (tåler PyPI-varianter)
+try:
+    from pyplejd.manager import PlejdManager  # type: ignore
+except Exception:
+    from pyplejd import PlejdManager  # type: ignore
+
+# Errors
+try:
+    from pyplejd.errors import AuthenticationError, ConnectionError  # type: ignore
+except Exception:
+    from pyplejd import AuthenticationError, ConnectionError  # type: ignore
+
+# BLE service
+try:
+    from pyplejd.ble import PLEJD_SERVICE  # type: ignore
+except Exception:
+    from pyplejd import PLEJD_SERVICE  # type: ignore
+
+# Device-types: bruk modul (gir dt.PlejdDeviceType, PlejdThermostat, ...)
+try:
+    from pyplejd.interface import device_type as dt  # type: ignore
+except Exception:
+    # veldig gammel layout
+    from pyplejd import DeviceTypes as dt  # type: ignore
+# --- END ---
+
 
 from .const import DOMAIN
 from .plejd_entity import register_unknown_device
