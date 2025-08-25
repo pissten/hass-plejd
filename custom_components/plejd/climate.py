@@ -26,6 +26,7 @@ def _id_of(dev: dt.PlejdDevice) -> str:
             getattr(dev, "index", None)
             or getattr(dev, "device_index", None)
             or getattr(dev, "device_id", None)
+            or getattr(dev, "address", None)
         )
     return str(pid) if pid is not None else "?"
 
