@@ -27,7 +27,7 @@ async def async_setup_entry(
     site = get_plejd_site_from_config_entry(hass, entry)
     entities: list[PlejdThermostatEntity] = []
 
-    # 1) Eksisterende enheter ved oppstart
+    # Eksisterende enheter ved oppstart
     for dev in site.devices:
         if getattr(dev, "outputType", None) == dt.PlejdDeviceType.CLIMATE or dev.__class__.__name__ == "PlejdThermostat":
             entities.append(PlejdThermostatEntity(dev))
@@ -41,7 +41,7 @@ async def async_setup_entry(
         async_add_entities(entities)
         _LOGGER.debug("Added %d Plejd climate entities at startup", len(entities))
 
-    # 2) Nye enheter som dukker opp senere (f.eks. etter reconnect)
+    # Nye enheter som dukker opp senere
     def _adder(dev: dt.PlejdDevice) -> None:
         if getattr(dev, "outputType", None) == dt.PlejdDeviceType.CLIMATE or dev.__class__.__name__ == "PlejdThermostat":
             ent = PlejdThermostatEntity(dev)
@@ -61,10 +61,8 @@ class PlejdThermostatEntity(PlejdDeviceBaseEntity, ClimateEntity):
     _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
     _attr_hvac_modes = SUPPORTED_HVAC_MODES
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
-    # TRM-01 område
     _attr_min_temp = 5.0
     _attr_max_temp = 40.0
-    # Bruk én desimal (HA håndterer presisjon selv, men greit å være eksplisitt)
     _attr_precision = 1.0
 
     def __init__(self, device: dt.PlejdDevice) -> None:
@@ -76,15 +74,14 @@ class PlejdThermostatEntity(PlejdDeviceBaseEntity, ClimateEntity):
         _LOGGER.debug(
             "Climate entity added: entity_id=%s for Plejd id=%s name=%s",
             self.entity_id,
-            getattr(self._device, "devId", "?"),
-            getattr(self._device, "name", "?"),
+            getattr(self.device, "devId", "?"),
+            getattr(self.device, "name", "?"),
         )
 
-    # --- State properties ---
+    # --- State ---
 
     @property
     def hvac_mode(self) -> HVACMode:
-        # settes i PlejdThermostat.parse_state(...)
         mode = self.device._state.get("hvac_mode", "off")
         try:
             return HVACMode(mode)
@@ -93,13 +90,21 @@ class PlejdThermostatEntity(PlejdDeviceBaseEntity, ClimateEntity):
 
     @property
     def hvac_action(self) -> HVACAction | None:
-        # optional – vises som heating/idle/off i UI
-        action = self.device._state.get("hvac_action", "idle")
-        try:
-            return HVACAction(action)
-        except Exception:
-            # Hvis underliggende state ikke følger enum-verdier, bare ikke rapportér action
-            return None
+        # 1) bruk parserens verdi hvis satt
+        action = self.device._state.get("hvac_action")
+        if action:
+            try:
+                return HVACAction(action)
+            except Exception:
+                pass
+        # 2) fallback fra TRM state (1=heating, 0=idle)
+        trm_state = self.device._state.get("trm_state")
+        if trm_state == 1:
+            return HVACAction.HEATING
+        if trm_state == 0:
+            return HVACAction.IDLE
+        # 3) avled fra hvac_mode
+        return HVACAction.OFF if self.hvac_mode == HVACMode.OFF else HVACAction.IDLE
 
     @property
     def current_temperature(self) -> float | None:
@@ -112,27 +117,25 @@ class PlejdThermostatEntity(PlejdDeviceBaseEntity, ClimateEntity):
     # --- Commands ---
 
     async def async_set_temperature(self, **kwargs) -> None:
-        if (t := kwargs.get(ATTR_TEMPERATURE)) is None:
+        t = kwargs.get(ATTR_TEMPERATURE)
+        if t is None:
             return
         t = float(t)
         _LOGGER.debug(
             "Set target_temperature=%.1f on Plejd id=%s",
             t,
-            getattr(self._device, "devId", "?"),
+            getattr(self.device, "devId", "?"),
         )
         await self.device.set_temperature(t)
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
-        # Under ligger en enkel mapping i PlejdThermostat.set_hvac_mode(...)
-        # som håndterer OFF/HEAT → korrekt skriv mot enheten.
         _LOGGER.debug(
             "Set hvac_mode=%s on Plejd id=%s",
             hvac_mode,
-            getattr(self._device, "devId", "?"),
+            getattr(self.device, "devId", "?"),
         )
         await self.device.set_hvac_mode(str(hvac_mode.value))
 
-    # (valgfritt) Flere convenience-metoder som enkelte integrasjoner bruker
     async def async_turn_on(self) -> None:
         await self.async_set_hvac_mode(HVACMode.HEAT)
 
