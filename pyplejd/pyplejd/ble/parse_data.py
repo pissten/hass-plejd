@@ -22,7 +22,6 @@ def _probe_trm04(addr: int, b1: int, b2: int, extra: list[int], data_hex: str) -
 
 def _probe_trm1b(addr: int, rest: list[int], data_hex: str) -> None:
     # status-telegram med 0x1b etter 0x03 0x00 (fra loggen din)
-    # vi bare logger råverdier nå – så ser vi hvilke byte som flipper ved on/off
     rec_log(f"TRM1B status rest={rest}", addr)
     rec_log(f"    {data_hex}", addr)
 
@@ -35,7 +34,7 @@ def parse_data(data: bytearray):
 
         # --- TRM-01 specific frames ----------------------------------------
         case [addr, 0x01, 0x10, 0x04, 0x5C, lo, hi]:
-            # Setpoint in little-endian, scaled ×10
+            # Setpoint i little-endian, skalert ×10
             sp = (hi << 8) | lo
             rec_log(f"TRM01 SETPOINT = {sp} ({sp/10:.1f}°C)", addr)
             rec_log(f"    {data_hex}", addr)
@@ -45,49 +44,51 @@ def parse_data(data: bytearray):
             }
 
         case [addr, 0x01, 0x10, 0x00, dim1, dim2, 0x80]:
-            # Heating ON
-            temp_c = dim2 - 74
-            rec_log(f"TRM01 HEATING=ON temp={temp_c}°C", addr)
+            # Heating ON (eldre form)
+            temp_c = dim2 - 74  # historisk heuristikk – behold som fallback
+            rec_log(f"TRM01 HEATING=ON temp~={temp_c}°C (legacy)", addr)
             rec_log(f"    {data_hex}", addr)
+            # Prøv å beregne fra LE også, hvis tallene gir mening
+            cover_position = int.from_bytes([dim1, dim2], byteorder="little", signed=True)
+            current_temperature = cover_position / 1000.0
             return {
                 "address": addr,
-                "current_temperature": temp_c,
+                "current_temperature": current_temperature,
                 "hvac_action": "heating",
                 "hvac_mode": "heat",
+                "power": True,
             }
 
         case [addr, 0x01, 0x10, 0x00, dim1, dim2, 0x00]:
-            # Heating OFF
-            temp_c = dim2 - 74
-            rec_log(f"TRM01 HEATING=OFF temp={temp_c}°C", addr)
+            # Heating OFF (eldre form)
+            temp_c = dim2 - 74  # historisk heuristikk – behold som fallback
+            rec_log(f"TRM01 HEATING=OFF temp~={temp_c}°C (legacy)", addr)
             rec_log(f"    {data_hex}", addr)
+            cover_position = int.from_bytes([dim1, dim2], byteorder="little", signed=True)
+            current_temperature = cover_position / 1000.0
             return {
                 "address": addr,
-                "current_temperature": temp_c,
+                "current_temperature": current_temperature,
                 "hvac_action": "idle",
                 "hvac_mode": "heat",
+                "power": True,
             }
         # --- TRM-01 discovery/probe ------------------------------------------------
 
         case [addr, 0x01, 0x00, 0x04, b1, b2, *extra]:
-            # Dette matcher rammer som: 13 01 00 04 5c a0 00   (130100045ca000)
-            # Vi antar dette er en "verdi"-rapport (to bytes), muligens current/target temp.
             _probe_trm04(addr, b1, b2, extra, data_hex)
             # foreløpig ingen retur (vi bare logger)
 
         case [addr, 0x01, 0x01, 0x04, b1, b2, *extra]:
-            # Du hadde også 13 01 01 04 5c a0 00   (130101045ca000)
             _probe_trm04(addr, b1, b2, extra, data_hex)
             # foreløpig ingen retur (vi bare logger)
 
         case [addr, 0x01, 0x03, 0x00, 0x1B, *rest]:
-            # Dette matcher: 13 01 03 00 1b dc 8e a9 68 01 00   (130103001bdc8ea9680100)
-            # Trolig statusramme som bl.a. kan inneholde heating on/off-bit.
             _probe_trm1b(addr, rest, data_hex)
             # foreløpig ingen retur (vi bare logger)
         # --- End TRM-01 discovery/probe --------------------------------------------
-        
-        
+
+
         case [0x01, 0x01, 0x10, *extra]:
             # Time data
             rec_log(f"TIME DATA {extra}", "TME")
@@ -137,7 +138,7 @@ def parse_data(data: bytearray):
             dim2,
             *extra,
         ]:
-            # State dim command
+            # State dim command (brukes også av TRM-01)
             extra_hex = "".join(f"{e:02x}" for e in extra)
             rec_log(f"DIM {state=} {dim1=} {dim2=} {extra=} {extra_hex}", addr)
 
@@ -155,7 +156,9 @@ def parse_data(data: bytearray):
                     cover_angle_sign = -1
                 cover_angle = (cover_angle & 0x1F) * cover_angle_sign
 
-            rec_log(f"    {cover_position=} {cover_angle=}", addr)
+            current_temperature = cover_position / 1000.0  # <-- NYTTIG FOR TRM-01
+
+            rec_log(f"    cover_position={cover_position} cover_angle={cover_angle}", addr)
             rec_log(f"    {data_hex}", addr)
             return {
                 "address": addr,
@@ -163,15 +166,24 @@ def parse_data(data: bytearray):
                 "dim": dim,
                 "cover_position": cover_position,
                 "cover_angle": cover_angle,
+                "current_temperature": current_temperature,        # <-- NY
+                "power": bool(state),                               # <-- NY
+                "hvac_action": "heating" if state else "idle",      # <-- forsiktig default
+                # NB: Vi setter ikke 'hvac_mode' her for alle enheter (kan være lys).
+                # Thermostat-parse_state vil sette hvac_mode riktig basert på state.
             }
 
         case [addr, 0x01, 0x10, 0x00, 0x97, state, *extra]:
-            # state command
+            # STATE-kommando (ON/OFF) – nyttig for å oppdatere climate raskt
             rec_log(f"STATE {state=} {extra=}", addr)
             rec_log(f"    {data_hex}", addr)
+            st = 1 if state else 0
             return {
                 "address": addr,
-                "state": state,
+                "state": st,
+                "power": bool(st),                    # <-- NY
+                "hvac_mode": "heat" if st else "off", # <-- hjelper climate rett etter toggle
+                "hvac_action": "heating" if st else "idle",
             }
 
         case [addr, 0x01, 0x10, 0x04, 0x20, a, 0x01, 0x11, *color_temp]:
