@@ -88,12 +88,16 @@ def parse_data(data: bytearray):
                 "hvac_action": "heating" if heating else "idle",
             }
         
-        # TRM1B statusramme (variant A):  ... 01 03 00 1b a t_hi t_lo b heat tail
+        # TRM1B statusramme (variant A): ... 01 03 00 1b a t_hi t_lo b heat tail
         case [addr, 0x01, 0x03, 0x00, 0x1B, a, t_hi, t_lo, b, heat_flag, tail]:
             temp_milli = (t_hi << 8) | t_lo
             temp_c = temp_milli / 1000.0
             heating = bool(heat_flag)
-            rec_log(f"TRM1B[A] temp={temp_c:.3f}°C heating={heating} raw=[{a:#04x},{t_hi:#04x},{t_lo:#04x},{b:#04x},{heat_flag:#04x},{tail:#04x}]", addr)
+            rec_log(
+                f"TRM1B[A] temp={temp_c:.3f}°C heating={heating} "
+                f"raw=[{a:#04x},{t_hi:#04x},{t_lo:#04x},{b:#04x},{heat_flag:#04x},{tail:#04x}]",
+                addr,
+            )
             rec_log(f"    {data_hex}", addr)
             if TRM_PROBE:
                 _scan_trm_candidates(addr, data_bytes, data_hex)
@@ -110,7 +114,11 @@ def parse_data(data: bytearray):
             temp_milli = (t_hi << 8) | t_lo
             temp_c = temp_milli / 1000.0
             heating = bool(heat_flag)
-            rec_log(f"TRM1B[B] temp={temp_c:.3f}°C heating={heating} raw=[{a:#04x},{t_hi:#04x},{t_lo:#04x},{b:#04x},{heat_flag:#04x}]", addr)
+            rec_log(
+                f"TRM1B[B] temp={temp_c:.3f}°C heating={heating} "
+                f"raw=[{a:#04x},{t_hi:#04x},{t_lo:#04x},{b:#04x},{heat_flag:#04x}]",
+                addr,
+            )
             rec_log(f"    {data_hex}", addr)
             if TRM_PROBE:
                 _scan_trm_candidates(addr, data_bytes, data_hex)
@@ -123,16 +131,19 @@ def parse_data(data: bytearray):
             }
 
         # TRM1B statusramme (variant C – samme nyttelast men 01 10 00 1b …)
-        # Broadcast (addr=0) finnes også i denne formen.
-        case [addr @ (0 | _), 0x01, 0x10, 0x00, 0x1B, a, t_hi, t_lo, b, heat_flag]:
+        # NB: addr kan være 0 (broadcast) eller faktisk enhetsadresse.
+        case [addr, 0x01, 0x10, 0x00, 0x1B, a, t_hi, t_lo, b, heat_flag]:
             temp_milli = (t_hi << 8) | t_lo
             temp_c = temp_milli / 1000.0
             heating = bool(heat_flag)
-            rec_log(f"TRM1B[C] temp={temp_c:.3f}°C heating={heating} raw=[{a:#04x},{t_hi:#04x},{t_lo:#04x},{b:#04x},{heat_flag:#04x}] (addr={addr})", addr if addr else "TRM")
+            rec_log(
+                f"TRM1B[C] temp={temp_c:.3f}°C heating={heating} "
+                f"raw=[{a:#04x},{t_hi:#04x},{t_lo:#04x},{b:#04x},{heat_flag:#04x}] (addr={addr})",
+                addr if addr else "TRM",
+            )
             rec_log(f"    {data_hex}", addr if addr else "TRM")
             if TRM_PROBE:
                 _scan_trm_candidates(addr, data_bytes, data_hex)
-            # Ved broadcast (addr=0) lar vi device‑objektet for TRM (addr 19 hos deg) plukke opp via "all"-feed; state merges i praksis
             return {
                 "address": addr,
                 "current_temperature": temp_c,
@@ -140,6 +151,7 @@ def parse_data(data: bytearray):
                 "power": True,
                 "hvac_mode": "heat",
             }
+
 
         # Legacy “heating on/off”-rammer – nyttige for action, men IKKE for temp
         case [addr, 0x01, 0x10, 0x00, dim1, dim2, 0x80]:
